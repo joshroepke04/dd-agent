@@ -55,12 +55,21 @@ namespace :ci do
         sh %(#{cassandra_rootdir}/bin/cassandra -p $VOLATILE_DIR/cass.pid > /dev/null)
         sh %(mkdir -p $VOLATILE_DIR/cassandra)
         Wait.for 9042, 60
+        sh %(bash #{kong_rootdir}/kong_install.sh)
+        Wait.for 8001, 10
       end
     end
 
     task before_script: ['ci:common:before_script'] do
-      sh %(bash #{kong_rootdir}/kong_install.sh)
-      Wait.for 8001, 10
+      ENV['LUA_CPATH'] = "./?.so;#{ENV['LUAROCKS_DIR']}/lib/lua/5.1/?.so;"
+      ENV['LUA_PATH'] = "./?.lua;#{ENV['LUAROCKS_DIR']}/share/lua/5.1/?.lua;#{ENV['LUAROCKS_DIR']}/share/lua/5.1/?/init.lua;\
+          #{ENV['LUAROCKS_DIR']}/lib/lua/5.1/?.lua;"
+      ENV['PATH'] = "#{ENV['LUAJIT_DIR']}/bin:#{ENV['LUAJIT_DIR']}/include/#{ENV['LUA_VERSION']}:#{ENV['LUAROCKS_DIR']}/bin:#{ENV['PATH']}"
+      ENV['PATH'] = "#{ENV['OPENRESTY_DIR']}/nginx/sbin:#{ENV['SERF_DIR']}:#{ENV['DNSMASQ_DIR']}/usr/local/sbin:#{ENV['PATH']}"
+      kong_yml = "#{ENV['TRAVIS_BUILD_DIR']}/ci/resources/kong/kong_DEVELOPMENT.yml"
+      sh %(cd #{kong_rootdir} && make install)
+      sh %(#{kong_rootdir}/bin/kong migrations -c #{kong_yml} up)
+      sh %(#{kong_rootdir}/bin/kong start -c #{kong_yml})
     end
 
     task script: ['ci:common:script'] do
